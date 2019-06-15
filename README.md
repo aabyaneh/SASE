@@ -1,1 +1,1 @@
-# SASE
+# Solver-Aided Symbolic Execution
