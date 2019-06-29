@@ -2381,7 +2381,11 @@ void implement_symbolic_input(uint64_t* context) {
   step = *(get_regs(context) + REG_A2);
 
   if (sase_symbolic) {
-    printf("symbolic input: lo: %llu, up: %llu, step: %llu, cnt: %llu, tc: %llu\n", lo, up, step, symbolic_input_cnt, sase_tc);
+    printf("symbolic input: lo: %llu, up: %llu, step: %llu, cnt: %llu\n", lo, up, step, symbolic_input_cnt);
+
+    if (step > 1) {
+      printf("%s\n", "step is greater than 1; continue assuming step = 1");
+    }
 
     sprintf(var_buffer, "in_%llu", symbolic_input_cnt++);
     in = boolector_var(btor, bv_sort, var_buffer);
