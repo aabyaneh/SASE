@@ -4064,13 +4064,7 @@ uint64_t handle_system_call(uint64_t* context) {
     return EXIT;
   }
 
-  if (get_exception(context) == EXCEPTION_MAXTRACE) {
-    // exiting during symbolic execution, no exit code necessary
-    set_exception(context, EXCEPTION_NOEXCEPTION);
-
-    return EXIT;
-  } else
-    return DONOTEXIT;
+  return DONOTEXIT;
 }
 
 uint64_t handle_page_fault(uint64_t* context) {
@@ -4092,10 +4086,17 @@ uint64_t handle_division_by_zero(uint64_t* context) {
   return EXIT;
 }
 
+uint64_t is_max_trace_reached = 0;
+
 uint64_t handle_max_trace(uint64_t* context) {
   set_exception(context, EXCEPTION_NOEXCEPTION);
 
   set_exit_code(context, EXITCODE_OUTOFTRACEMEMORY);
+
+  if (is_max_trace_reached == 0) {
+    printf("%s\n", "max trace length reached, continue the execution");
+    is_max_trace_reached = 1;
+  }
 
   return EXIT;
 }

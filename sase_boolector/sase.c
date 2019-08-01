@@ -110,17 +110,25 @@ void init_sase() {
   constrained_reads     = malloc(sizeof(BoolectorNode*) * sase_trace_size);
 }
 
+uint64_t is_trace_space_available() {
+  return tc + 1 < sase_trace_size;
+}
+
 BoolectorNode* boolector_unsigned_int_64(uint64_t value) {
   return boolector_concat(btor, boolector_unsigned_int(btor, value & MASK_HI, bv_sort_32), boolector_unsigned_int(btor, value & MASK_LO, bv_sort_32));
 }
 
 void store_registers_fp_sp_rd() {
+  if (tc + 2 >= sase_trace_size)
+    throw_exception(EXCEPTION_MAXTRACE, 0);
+
   tc++;
   *(tcs             + tc) = 0;
   *(is_symbolics    + tc) = 0;
   *(values          + tc) = *(registers + REG_FP);
   *(symbolic_values + tc) = sase_regs[REG_FP];
   *(vaddrs + tc)          = rd;
+
   tc++;
   *(tcs             + tc) = 0;
   *(is_symbolics    + tc) = 0;
@@ -426,7 +434,7 @@ void sase_sltu() {
 
 void sase_backtrack_sltu(int is_true_branch_unreachable) {
   if (sase_tc == 0) {
-    printf("pc: %llx, read_tc: %llu, arg: %d\n", pc - entry_point, read_tc, is_true_branch_unreachable);
+    // printf("pc: %llx, read_tc: %llu, arg: %d\n", pc - entry_point, read_tc, is_true_branch_unreachable);
     pc = 0;
     return;
   }
@@ -540,7 +548,7 @@ void sase_store_memory(uint64_t* pt, uint64_t vaddr, uint8_t is_symbolic, uint64
     *(is_symbolics    + mrv) = is_symbolic;
     *(values          + mrv) = value;
     *(symbolic_values + mrv) = sym_value;
-  } else {
+  } else if (is_trace_space_available()) {
     tc++;
 
     *(tcs             + tc) = mrv;
@@ -550,7 +558,8 @@ void sase_store_memory(uint64_t* pt, uint64_t vaddr, uint8_t is_symbolic, uint64
     *(vaddrs          + tc) = vaddr;
 
     store_virtual_memory(pt, vaddr, tc);
-  }
+  } else
+    throw_exception(EXCEPTION_MAXTRACE, 0);
 }
 
 void backtrack_branch_stores() {

@@ -524,7 +524,7 @@ void sase_store_memory(uint64_t* pt, uint64_t vaddr, uint8_t is_symbolic, uint64
     *(is_symbolics    + tc) = is_symbolic;
     *(values          + tc) = value;
     *(symbolic_values + tc) = sym_value;
-    *(vaddrs + tc) = vaddr;
+    *(vaddrs          + tc) = vaddr;
 
     store_virtual_memory(pt, vaddr, tc);
   } else
