@@ -135,6 +135,11 @@ extern uint64_t          read_tc;
 extern uint64_t          read_tc_current;
 extern uint64_t          read_buffer;
 
+// input trace
+extern uint64_t          input_cnt;
+extern uint64_t          input_cnt_current;
+extern BoolectorNode**   constrained_inputs;
+
 // ********************** engine functions ************************
 
 void store_registers_fp_sp_rd();

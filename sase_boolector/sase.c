@@ -63,6 +63,12 @@ uint64_t        read_tc         = 0;
 uint64_t        read_tc_current = 0;
 uint64_t        read_buffer     = 0;
 
+// input trace
+BoolectorNode** constrained_inputs;
+uint64_t*       sase_input_trace_ptrs;
+uint64_t        input_cnt         = 0;
+uint64_t        input_cnt_current = 0;
+
 uint64_t MASK_LO = 4294967295;
 uint64_t MASK_HI = 18446744069414584320;
 
@@ -108,6 +114,9 @@ void init_sase() {
 
   concrete_reads        = malloc(sizeof(uint64_t)       * sase_trace_size);
   constrained_reads     = malloc(sizeof(BoolectorNode*) * sase_trace_size);
+
+  constrained_inputs    = malloc(sizeof(BoolectorNode*) * sase_trace_size);
+  sase_input_trace_ptrs = malloc(sizeof(uint64_t)       * sase_trace_size);
 }
 
 uint64_t is_trace_space_available() {
@@ -412,6 +421,7 @@ void sase_sltu() {
       // symbolic semantics
       sase_program_brks[sase_tc]     = get_program_break(current_context);
       sase_read_trace_ptrs[sase_tc]  = read_tc_current;
+      sase_input_trace_ptrs[sase_tc] = input_cnt_current;
       sase_store_trace_ptrs[sase_tc] = mrif;
       mrif = tc;
       store_registers_fp_sp_rd(); // after mrif =
@@ -440,8 +450,9 @@ void sase_backtrack_sltu(int is_true_branch_unreachable) {
   }
 
   sase_tc--;
-  pc              = sase_pcs[sase_tc];
-  read_tc_current = sase_read_trace_ptrs[sase_tc];
+  pc                = sase_pcs[sase_tc];
+  read_tc_current   = sase_read_trace_ptrs[sase_tc];
+  input_cnt_current = sase_input_trace_ptrs[sase_tc];
   set_program_break(current_context, sase_program_brks[sase_tc]);
   backtrack_branch_stores(); // before mrif =
   mrif = sase_store_trace_ptrs[sase_tc];

@@ -518,8 +518,6 @@ uint64_t SYSCALL_ASSERT_ZONE_BGN = 44;
 uint64_t SYSCALL_ASSERT          = 45;
 uint64_t SYSCALL_ASSERT_ZONE_END = 46;
 
-uint64_t symbolic_input_cnt = 0;
-
 // *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~
 // -----------------------------------------------------------------
 // ----------------------    R U N T I M E    ----------------------
@@ -2374,33 +2372,57 @@ void implement_symbolic_input(uint64_t* context) {
   uint64_t lo;
   uint64_t up;
   uint64_t step;
-  BoolectorNode* in;
 
   lo   = *(get_regs(context) + REG_A0);
   up   = *(get_regs(context) + REG_A1);
   step = *(get_regs(context) + REG_A2);
 
   if (sase_symbolic) {
-    printf("symbolic input: lo: %llu, up: %llu, step: %llu, cnt: %llu\n", lo, up, step, symbolic_input_cnt);
+    printf("symbolic input: lo: %llu, up: %llu, step: %llu, cnt: %llu\n", lo, up, step, input_cnt_current);
 
     if (step > 1) {
       printf("%s\n", "step is greater than 1; continue assuming step = 1");
     }
 
-    sprintf(var_buffer, "in_%llu", symbolic_input_cnt++);
-    in = boolector_var(btor, bv_sort, var_buffer);
-    // <= up
-    if (up < two_to_the_power_of_32)
-      boolector_assert(btor, boolector_ulte(btor, in, boolector_unsigned_int(btor, up, bv_sort)));
-    else
-      boolector_assert(btor, boolector_ulte(btor, in, boolector_unsigned_int_64(up)));
-    // >= lo
-    if (lo < two_to_the_power_of_32)
-      boolector_assert(btor, boolector_ugte(btor, in, boolector_unsigned_int(btor, lo, bv_sort)));
-    else
-      boolector_assert(btor, boolector_ugte(btor, in, boolector_unsigned_int_64(lo)));
+    if (input_cnt_current < input_cnt) {
+      if (up < two_to_the_power_of_32)
+        boolector_assert(btor, boolector_ulte(btor, constrained_inputs[input_cnt_current], boolector_unsigned_int(btor, up, bv_sort)));
+      else
+        boolector_assert(btor, boolector_ulte(btor, constrained_inputs[input_cnt_current], boolector_unsigned_int_64(up)));
+      // >= lo
+      if (lo < two_to_the_power_of_32)
+        boolector_assert(btor, boolector_ugte(btor, constrained_inputs[input_cnt_current], boolector_unsigned_int(btor, lo, bv_sort)));
+      else
+        boolector_assert(btor, boolector_ugte(btor, constrained_inputs[input_cnt_current], boolector_unsigned_int_64(lo)));
 
-    sase_regs[REG_A0]     = in;
+      sase_regs[REG_A0] = constrained_inputs[input_cnt_current];
+      input_cnt_current++;
+
+    } else {
+      if (input_cnt_current > input_cnt) {
+        printf("OUTPUT: input_cnt_current > input_cnt \n");
+        exit(EXITCODE_SYMBOLICEXECUTIONERROR);
+      }
+
+      sprintf(var_buffer, "in_%llu", input_cnt);
+      constrained_inputs[input_cnt] = boolector_var(btor, bv_sort, var_buffer);
+      // <= up
+      if (up < two_to_the_power_of_32)
+        boolector_assert(btor, boolector_ulte(btor, constrained_inputs[input_cnt], boolector_unsigned_int(btor, up, bv_sort)));
+      else
+        boolector_assert(btor, boolector_ulte(btor, constrained_inputs[input_cnt], boolector_unsigned_int_64(up)));
+      // >= lo
+      if (lo < two_to_the_power_of_32)
+        boolector_assert(btor, boolector_ugte(btor, constrained_inputs[input_cnt], boolector_unsigned_int(btor, lo, bv_sort)));
+      else
+        boolector_assert(btor, boolector_ugte(btor, constrained_inputs[input_cnt], boolector_unsigned_int_64(lo)));
+
+      sase_regs[REG_A0] = constrained_inputs[input_cnt];
+      input_cnt++;
+      input_cnt_current++;
+
+    }
+
     sase_regs_typ[REG_A0] = SYMBOLIC_T;
 
     set_pc(context, get_pc(context) + INSTRUCTIONSIZE);
