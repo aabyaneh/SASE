@@ -15,6 +15,7 @@
 // -----------------------------------------------------------------
 
 char           var_buffer[100];   // a buffer for automatic variable name generation
+char           const_buffer[64];  // a buffer for loading integers of more than 32 bits
 Btor*          btor;
 BoolectorSort  bv_sort;
 BoolectorSort  bv_sort_32;
@@ -68,9 +69,6 @@ BoolectorNode** constrained_inputs;
 uint64_t*       sase_input_trace_ptrs;
 uint64_t        input_cnt         = 0;
 uint64_t        input_cnt_current = 0;
-
-uint64_t MASK_LO = 4294967295;
-uint64_t MASK_HI = 18446744069414584320;
 
 // ********************** engine functions ************************
 
@@ -130,7 +128,8 @@ uint64_t is_trace_space_available() {
 }
 
 BoolectorNode* boolector_unsigned_int_64(uint64_t value) {
-  return boolector_concat(btor, boolector_unsigned_int(btor, value & MASK_HI, bv_sort_32), boolector_unsigned_int(btor, value & MASK_LO, bv_sort_32));
+  sprintf(const_buffer, "%llu", value);
+  return boolector_constd(btor, bv_sort, const_buffer);
 }
 
 void store_registers_fp_sp_rd() {
@@ -509,7 +508,7 @@ void sase_sd() {
 void sase_jal_jalr() {
   if (rd != REG_ZR) {
     // assert: *(registers + rd) < 2^32
-    sase_regs[rd]     = boolector_unsigned_int(btor, *(registers + rd), bv_sort);
+    sase_regs[rd] = (registers[rd] < two_to_the_power_of_32) ? boolector_unsigned_int(btor, registers[rd], bv_sort) : boolector_unsigned_int_64(registers[rd]);
 
     sase_regs_typ[rd] = CONCRETE_T;
   }

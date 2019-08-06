@@ -2217,10 +2217,15 @@ void implement_read(uint64_t* context) {
 
             printf("reused read: %llu, lo: %llu, up: %llu, read_tc_cur: %llu, read_tc: %llu tc: %llu\n", value, lo,up, read_tc_current, read_tc, sase_tc);
 
-            // assert: up < 2^32
-            boolector_assert(btor, boolector_ulte(btor, constrained_reads[read_tc_current],boolector_unsigned_int(btor, up, bv_sort)));
-            // assert: lo < 2^32
-            boolector_assert(btor, boolector_ugte(btor, constrained_reads[read_tc_current],boolector_unsigned_int(btor, lo, bv_sort)));
+            if (up < two_to_the_power_of_32)
+              boolector_assert(btor, boolector_ulte(btor, constrained_reads[read_tc_current], boolector_unsigned_int(btor, up, bv_sort)));
+            else
+              boolector_assert(btor, boolector_ulte(btor, constrained_reads[read_tc_current], boolector_unsigned_int_64(up)));
+            // >= lo
+            if (lo < two_to_the_power_of_32)
+              boolector_assert(btor, boolector_ugte(btor, constrained_reads[read_tc_current], boolector_unsigned_int(btor, lo, bv_sort)));
+            else
+              boolector_assert(btor, boolector_ugte(btor, constrained_reads[read_tc_current], boolector_unsigned_int_64(lo)));
 
             sase_store_memory(get_pt(context), vbuffer, SYMBOLIC_T, value, constrained_reads[read_tc_current]);
             read_tc_current++;
@@ -2253,11 +2258,16 @@ void implement_read(uint64_t* context) {
               concrete_reads[read_tc] = value;
 
               sprintf(var_buffer, "rv_%llu", read_tc);
-              // assert: up < 2^32
               constrained_reads[read_tc] = boolector_var(btor, bv_sort, var_buffer);
-              boolector_assert(btor, boolector_ulte(btor, constrained_reads[read_tc], boolector_unsigned_int(btor,up, bv_sort)));
-              // assert: lo < 2^32
-              boolector_assert(btor, boolector_ugte(btor, constrained_reads[read_tc], boolector_unsigned_int(btor,lo, bv_sort)));
+              if (up < two_to_the_power_of_32)
+                boolector_assert(btor, boolector_ulte(btor, constrained_reads[read_tc], boolector_unsigned_int(btor, up, bv_sort)));
+              else
+                boolector_assert(btor, boolector_ulte(btor, constrained_reads[read_tc], boolector_unsigned_int_64(up)));
+              // >= lo
+              if (lo < two_to_the_power_of_32)
+                boolector_assert(btor, boolector_ugte(btor, constrained_reads[read_tc], boolector_unsigned_int(btor, lo, bv_sort)));
+              else
+                boolector_assert(btor, boolector_ugte(btor, constrained_reads[read_tc], boolector_unsigned_int_64(lo)));
 
               sase_store_memory(get_pt(context), vbuffer, SYMBOLIC_T, value, constrained_reads[read_tc]);
               read_tc++;
@@ -2305,11 +2315,12 @@ void implement_read(uint64_t* context) {
     *(get_regs(context) + REG_A0) = sign_shrink(-1, SYSCALL_BITWIDTH);
 
   if (sase_symbolic) {
-    if (*(get_regs(context) + REG_A0) < two_to_the_power_of_32) {
-      sase_regs[REG_A0]     = boolector_unsigned_int(btor, *(get_regs(context) + REG_A0), bv_sort);
-      sase_regs_typ[REG_A0] = CONCRETE_T;
-    } else
-      printf2((uint64_t*) "%s: big read in read syscall: %d\n", exe_name, (uint64_t*) *(get_regs(context) +REG_A0));
+    if (*(get_regs(context) + REG_A0) < two_to_the_power_of_32)
+      sase_regs[REG_A0] = boolector_unsigned_int(btor, *(get_regs(context) + REG_A0), bv_sort);
+    else
+      sase_regs[REG_A0] = boolector_unsigned_int_64(*(get_regs(context) + REG_A0));
+
+    sase_regs_typ[REG_A0] = CONCRETE_T;
   }
 
   set_pc(context, get_pc(context) + INSTRUCTIONSIZE);
@@ -2524,11 +2535,12 @@ void implement_write(uint64_t* context) {
     *(get_regs(context) + REG_A0) = sign_shrink(-1, SYSCALL_BITWIDTH);
 
   if (sase_symbolic) {
-    if (*(get_regs(context) + REG_A0) < two_to_the_power_of_32) {
-      sase_regs[REG_A0]     = boolector_unsigned_int(btor, *(get_regs(context) + REG_A0), bv_sort);
-      sase_regs_typ[REG_A0] = CONCRETE_T;
-    } else
-      printf2((uint64_t*) "%s: big write in write syscall: %d\n", exe_name, (uint64_t*) *(get_regs(context) + REG_A0));
+    if (*(get_regs(context) + REG_A0) < two_to_the_power_of_32)
+      sase_regs[REG_A0] = boolector_unsigned_int(btor, *(get_regs(context) + REG_A0), bv_sort);
+    else
+      sase_regs[REG_A0] = boolector_unsigned_int_64(*(get_regs(context) + REG_A0));
+
+    sase_regs_typ[REG_A0] = CONCRETE_T;
   }
 
   set_pc(context, get_pc(context) + INSTRUCTIONSIZE);
@@ -2630,8 +2642,11 @@ void implement_open(uint64_t* context) {
   }
 
   if (sase_symbolic) {
-    // assert: *(get_regs(context) + REG_A0) < 2^32
-    sase_regs[REG_A0]     = boolector_unsigned_int(btor, *(get_regs(context) + REG_A0), bv_sort);
+    if (*(get_regs(context) + REG_A0) < two_to_the_power_of_32)
+      sase_regs[REG_A0] = boolector_unsigned_int(btor, *(get_regs(context) + REG_A0), bv_sort);
+    else
+      sase_regs[REG_A0] = boolector_unsigned_int_64(*(get_regs(context) + REG_A0));
+
     sase_regs_typ[REG_A0] = CONCRETE_T;
   }
 
@@ -2681,7 +2696,7 @@ void implement_brk(uint64_t* context) {
     if (sase_symbolic) {
       // assert: program_break < 2^32
       // true for the original malloc code = program_break
-      sase_regs[REG_A0]     = boolector_unsigned_int(btor, program_break, bv_sort); // no need
+      sase_regs[REG_A0]     = (program_break < two_to_the_power_of_32) ? boolector_unsigned_int(btor, program_break, bv_sort) : boolector_unsigned_int_64(program_break); // no need
       sase_regs_typ[REG_A0] = CONCRETE_T;
 
       // size = program_break - previous_program_break;
@@ -4045,7 +4060,7 @@ void up_load_arguments(uint64_t* context, uint64_t argc, uint64_t* argv) {
   // set bounds to register value for symbolic execution
   if (sase_symbolic) {
     // assert: SP < 2^32
-    sase_regs[REG_SP] = boolector_unsigned_int(btor, SP, bv_sort);
+    sase_regs[REG_SP] = (SP < two_to_the_power_of_32) ? boolector_unsigned_int(btor, SP, bv_sort) : boolector_unsigned_int_64(SP);
     sase_regs_typ[REG_SP] = CONCRETE_T;
   }
 }
