@@ -99,13 +99,13 @@ extern BoolectorNode*    twelve_bv;
 extern uint64_t          sase_symbolic;
 extern uint64_t          b;
 extern uint64_t          SASE;
-extern uint64_t          CONCRETE_T;
-extern uint64_t          SYMBOLIC_T;
+extern uint8_t           CONCRETE_T;
+extern uint8_t           SYMBOLIC_T;
 extern uint64_t          two_to_the_power_of_32;
 
 // symbolic registers
 extern BoolectorNode**   sase_regs;
-extern uint64_t*         sase_regs_typ;
+extern uint8_t*          sase_regs_typ;
 
 // engine trace
 extern uint64_t          sase_trace_size;
