@@ -14,39 +14,39 @@
 // ---------------- Solver Aided Symbolic Execution ----------------
 // -----------------------------------------------------------------
 
-char     var_buffer[100]; // a buffer for automatic variable name generation
-context  ctx;
-solver   slv(ctx);
-expr     zero_bv(ctx);
-expr     one_bv(ctx);
-expr     eight_bv(ctx);
-expr     meight_bv(ctx);
+char      var_buffer[100];   // a buffer for automatic variable name generation
+context   ctx;
+solver    slv(ctx);
+expr      zero_bv(ctx);
+expr      one_bv(ctx);
+expr      eight_bv(ctx);
+expr      meight_bv(ctx);
 
-uint64_t       sase_symbolic = 0; // flag for symbolically executing code
-uint64_t       b             = 0; // counting total number of backtracking
-uint64_t       SASE          = 8; // Solver Aided Symbolic Execution
-uint64_t       CONCRETE_T    = 0; // concrete value type
-uint64_t       SYMBOLIC_T    = 1; // symbolic value type
+uint64_t  sase_symbolic = 0; // flag for symbolically executing code
+uint64_t  b             = 0; // counting total number of backtracking
+uint64_t  SASE          = 8; // Solver Aided Symbolic Execution
+uint8_t   CONCRETE_T    = 0; // concrete value type
+uint8_t   SYMBOLIC_T    = 1; // symbolic value type
 
 // symbolic registers
-expr*      sase_regs;         // array of pointers to SMT expressions
-uint64_t*  sase_regs_typ;     // CONCRETE_T or SYMBOLIC_T
+expr*     sase_regs;         // array of pointers to SMT expressions
+uint8_t*  sase_regs_typ;     // CONCRETE_T or SYMBOLIC_T
 
 // engine trace
-uint64_t   sase_trace_size = 10000000;
-uint64_t   sase_tc         = 0;    // trace counter
-uint64_t*  sase_pcs;
-expr*      sase_false_branchs;
-uint64_t*  sase_read_trace_ptrs;   // pointers to read trace
-uint64_t*  sase_program_brks;      // keep track of program_break
-uint64_t*  sase_store_trace_ptrs;  // pointers to store trace
-uint64_t*  sase_rds;
-uint64_t   mrif           = 0;      // most recent conditional
-uint8_t    which_branch   = 0;      // which branch is taken
-uint8_t    assert_zone    = 0;      // is assertion zone?
+uint64_t  sase_trace_size = 10000000;
+uint64_t  sase_tc         = 0;    // trace counter
+uint64_t* sase_pcs;
+expr*     sase_false_branchs;
+uint64_t* sase_read_trace_ptrs;   // pointers to read trace
+uint64_t* sase_program_brks;      // keep track of program_break
+uint64_t* sase_store_trace_ptrs;  // pointers to store trace
+uint64_t* sase_rds;
+uint64_t  mrif          = 0;      // most recent conditional expression
+uint8_t   which_branch  = 0;      // which branch is taken
+uint8_t   assert_zone   = 0;      // is assertion zone?
 
 // store trace
-uint64_t  tc;
+uint64_t  tc            = 0;
 uint64_t* tcs;
 uint64_t* vaddrs;
 uint64_t* values;
@@ -60,6 +60,12 @@ uint64_t  read_tc         = 0;
 uint64_t  read_tc_current = 0;
 uint64_t  read_buffer     = 0;
 
+// input trace
+expr*     constrained_inputs;
+uint64_t* sase_input_trace_ptrs;
+uint64_t  input_cnt         = 0;
+uint64_t  input_cnt_current = 0;
+
 // ********************** engine functions ************************
 
 void init_sase() {
@@ -68,29 +74,38 @@ void init_sase() {
   eight_bv  = ctx.bv_val(8, 64);
   meight_bv = ctx.bv_val(-8u, 64);
 
-  sase_regs     = (expr*) malloc(sizeof(expr) * NUMBEROFREGISTERS);
-  sase_regs_typ = new uint64_t[NUMBEROFREGISTERS];
+  sase_regs              = (expr*)    malloc(sizeof(expr)    * NUMBEROFREGISTERS);
+  sase_regs_typ          = (uint8_t*) malloc(sizeof(uint8_t) * NUMBEROFREGISTERS);
   for (size_t i = 0; i < NUMBEROFREGISTERS; i++) {
     sase_regs_typ[i] = CONCRETE_T;
   }
   sase_regs[REG_ZR] = zero_bv;
   sase_regs[REG_FP] = zero_bv;
 
-  sase_pcs              = new uint64_t[sase_trace_size];
-  sase_false_branchs    = (expr*) malloc(sizeof(expr) * sase_trace_size);
-  sase_read_trace_ptrs  = new uint64_t[sase_trace_size];
-  sase_program_brks     = new uint64_t[sase_trace_size];
-  sase_store_trace_ptrs = new uint64_t[sase_trace_size];
-  sase_rds              = new uint64_t[sase_trace_size];
+  sase_pcs              = (uint64_t*) malloc(sizeof(uint64_t) * sase_trace_size);
+  sase_false_branchs    = (expr*)     malloc(sizeof(expr)     * sase_trace_size);
+  sase_read_trace_ptrs  = (uint64_t*) malloc(sizeof(uint64_t) * sase_trace_size);
+  sase_program_brks     = (uint64_t*) malloc(sizeof(uint64_t) * sase_trace_size);
+  sase_store_trace_ptrs = (uint64_t*) malloc(sizeof(uint64_t) * sase_trace_size);
+  sase_rds              = (uint64_t*) malloc(sizeof(uint64_t) * sase_trace_size);
 
-  tcs             = new uint64_t[sase_trace_size];
-  vaddrs          = new uint64_t[sase_trace_size];
-  values          = new uint64_t[sase_trace_size];
-  is_symbolics    = new uint8_t[sase_trace_size];
-  symbolic_values = (expr*) malloc(sizeof(expr) * sase_trace_size);
+  tcs                   = (uint64_t*) malloc(sizeof(uint64_t) * sase_trace_size);
+  vaddrs                = (uint64_t*) malloc(sizeof(uint64_t) * sase_trace_size);
+  values                = (uint64_t*) malloc(sizeof(uint64_t) * sase_trace_size);
+  is_symbolics          = (uint8_t*)  malloc(sizeof(uint8_t)  * sase_trace_size);
+  symbolic_values       = (expr*)     malloc(sizeof(expr)     * sase_trace_size);
 
-  concrete_reads        = new uint64_t[sase_trace_size];
-  constrained_reads     = (expr*) malloc(sizeof(expr) * sase_trace_size);
+  concrete_reads        = (uint64_t*) malloc(sizeof(uint64_t) * sase_trace_size);
+  constrained_reads     = (expr*)     malloc(sizeof(expr)     * sase_trace_size);
+
+  constrained_inputs    = (expr*)     malloc(sizeof(expr)     * sase_trace_size);
+  sase_input_trace_ptrs = (uint64_t*) malloc(sizeof(uint64_t) * sase_trace_size);
+
+  // initialization
+  *tcs             = 0;
+  *vaddrs          = 0;
+  *is_symbolics    = CONCRETE_T;
+  *symbolic_values = ctx.bv_val(*values, 64);
 }
 
 uint64_t is_trace_space_available() {
@@ -250,10 +265,7 @@ void sase_add() {
   if (rd != REG_ZR) {
     sase_regs[rd] = sase_regs[rs1] + sase_regs[rs2];
 
-    if (sase_regs_typ[rs1] == CONCRETE_T && sase_regs_typ[rs2] == CONCRETE_T)
-      sase_regs_typ[rd] = CONCRETE_T;
-    else
-      sase_regs_typ[rd] = SYMBOLIC_T;
+    sase_regs_typ[rd] = sase_regs_typ[rs1] | sase_regs_typ[rs2];
   }
 }
 
@@ -261,10 +273,7 @@ void sase_sub() {
   if (rd != REG_ZR) {
     sase_regs[rd] = sase_regs[rs1] - sase_regs[rs2];
 
-    if (sase_regs_typ[rs1] == CONCRETE_T && sase_regs_typ[rs2] == CONCRETE_T)
-      sase_regs_typ[rd] = CONCRETE_T;
-    else
-      sase_regs_typ[rd] = SYMBOLIC_T;
+    sase_regs_typ[rd] = sase_regs_typ[rs1] | sase_regs_typ[rs2];
   }
 }
 
@@ -272,10 +281,7 @@ void sase_mul() {
   if (rd != REG_ZR) {
     sase_regs[rd] = sase_regs[rs1] * sase_regs[rs2];
 
-    if (sase_regs_typ[rs1] == CONCRETE_T && sase_regs_typ[rs2] == CONCRETE_T)
-      sase_regs_typ[rd] = CONCRETE_T;
-    else
-      sase_regs_typ[rd] = SYMBOLIC_T;
+    sase_regs_typ[rd] = sase_regs_typ[rs1] | sase_regs_typ[rs2];
   }
 }
 
@@ -284,10 +290,10 @@ void sase_divu() {
   slv.push();
   slv.add(sase_regs[rs2] == zero_bv);
   if (slv.check() == sat) {
-    printf("%s\n", "SE division by zero!");
-    printf("pc: %llx\n", pc - entry_point);
+    printf("OUTPUT: SE division by zero! at pc %llx \n", pc - entry_point);
+    printf("backtracking: %llu \n", b);
     std::cout << slv.get_model() << "\n";
-    // exit(EXITCODE_SYMBOLICEXECUTIONERROR);
+    exit((int) EXITCODE_SYMBOLICEXECUTIONERROR);
   }
   slv.pop();
 
@@ -295,10 +301,7 @@ void sase_divu() {
   if (rd != REG_ZR) {
     sase_regs[rd] = udiv(sase_regs[rs1], sase_regs[rs2]);
 
-    if (sase_regs_typ[rs1] == CONCRETE_T && sase_regs_typ[rs2] == CONCRETE_T)
-      sase_regs_typ[rd] = CONCRETE_T;
-    else
-      sase_regs_typ[rd] = SYMBOLIC_T;
+    sase_regs_typ[rd] = sase_regs_typ[rs1] | sase_regs_typ[rs2];
   }
 }
 
@@ -307,10 +310,10 @@ void sase_remu() {
   slv.push();
   slv.add(sase_regs[rs2] == zero_bv);
   if (slv.check() == sat) {
-    printf("%s\n", "SE division by zero!");
-    printf("pc: %llx\n", pc - entry_point);
+    printf("OUTPUT: SE division by zero! at pc %llx \n", pc - entry_point);
+    printf("backtracking: %llu \n", b);
     std::cout << slv.get_model() << "\n";
-    // exit(EXITCODE_SYMBOLICEXECUTIONERROR);
+    exit((int) EXITCODE_SYMBOLICEXECUTIONERROR);
   }
   slv.pop();
 
@@ -318,10 +321,7 @@ void sase_remu() {
   if (rd != REG_ZR) {
     sase_regs[rd] = urem(sase_regs[rs1], sase_regs[rs2]);
 
-    if (sase_regs_typ[rs1] == CONCRETE_T && sase_regs_typ[rs2] == CONCRETE_T)
-      sase_regs_typ[rd] = CONCRETE_T;
-    else
-      sase_regs_typ[rd] = SYMBOLIC_T;
+    sase_regs_typ[rd] = sase_regs_typ[rs1] | sase_regs_typ[rs2];
   }
 }
 
@@ -376,6 +376,7 @@ void sase_sltu() {
 
       slv.push();
       slv.add(ult(sase_regs[rs1], sase_regs[rs2]));
+
       pc = pc + INSTRUCTIONSIZE;
     }
 
@@ -383,6 +384,7 @@ void sase_sltu() {
       // symbolic semantics
       sase_program_brks[sase_tc]     = get_program_break(current_context);
       sase_read_trace_ptrs[sase_tc]  = read_tc_current;
+      sase_input_trace_ptrs[sase_tc] = input_cnt_current;
       sase_store_trace_ptrs[sase_tc] = mrif;
       mrif = tc;
       store_registers_fp_sp_rd(); // after mrif =
@@ -394,14 +396,14 @@ void sase_sltu() {
         *(registers + rd) = 1;
       } else {
         // printf("%s\n", "unreachable branch true!");
-        // b++;
         sase_backtrack_sltu(1);
       }
     } else {
       slv.pop();
     }
 
-  }
+  } else
+    pc = pc + INSTRUCTIONSIZE;
 }
 
 void sase_backtrack_sltu(int is_true_branch_unreachable) {
@@ -412,8 +414,9 @@ void sase_backtrack_sltu(int is_true_branch_unreachable) {
   }
 
   sase_tc--;
-  pc              = sase_pcs[sase_tc];
-  read_tc_current = sase_read_trace_ptrs[sase_tc];
+  pc                = sase_pcs[sase_tc];
+  read_tc_current   = sase_read_trace_ptrs[sase_tc];
+  input_cnt_current = sase_input_trace_ptrs[sase_tc];
   set_program_break(current_context, sase_program_brks[sase_tc]);
   backtrack_branch_stores(); // before mrif =
   mrif = sase_store_trace_ptrs[sase_tc];
@@ -423,7 +426,7 @@ void sase_backtrack_sltu(int is_true_branch_unreachable) {
   if (slv.check() == unsat) {
     if (is_true_branch_unreachable) {
       printf("%s\n", "unreachable branch both true and false!");
-      // exit(EXITCODE_SYMBOLICEXECUTIONERROR);
+      exit((int) EXITCODE_SYMBOLICEXECUTIONERROR);
     } else {
       // printf("%s %llu\n", "unreachable branch false!", pc);
       sase_backtrack_sltu(0);
@@ -444,27 +447,18 @@ void sase_ld() {
       if (rd != REG_ZR) {
         mrv = load_symbolic_memory(pt, vaddr);
 
-        // if (mrv == 0) {
-        //   printf("%s %llu %x\n", "uninitialize memory", vaddr, pc - entry_point);
-        // }
+        // if (mrv == 0)
+        //   printf("OUTPUT: uninitialize memory address %llu at pc %x\n", vaddr, pc - entry_point);
 
-        if (*(is_symbolics + mrv) == CONCRETE_T) {
-          sase_regs_typ[rd] = CONCRETE_T;
-          if (!mrv) { //*(symbolic_values + mrv) == 0) {
-            sase_regs[rd] = ctx.bv_val(*(values + mrv), 64);
-          } else {
-            sase_regs[rd] = *(symbolic_values + mrv);
-          }
-        } else {
-          sase_regs_typ[rd] = SYMBOLIC_T;
-          sase_regs[rd]     = *(symbolic_values + mrv);
-        }
-
-        *(registers + rd) = *(values + mrv);
+        sase_regs_typ[rd] = *(is_symbolics    + mrv);
+        sase_regs[rd]     = *(symbolic_values + mrv);
+        registers[rd]     = *(values          + mrv);
 
         pc = pc + INSTRUCTIONSIZE;
         ic_ld = ic_ld + 1;
-      }
+
+      } else
+        pc = pc + INSTRUCTIONSIZE;
     } else
       throw_exception(EXCEPTION_PAGEFAULT, get_page_of_virtual_address(vaddr));
   } else
@@ -477,11 +471,7 @@ void sase_sd() {
   if (is_valid_virtual_address(vaddr)) {
     if (is_virtual_address_mapped(pt, vaddr)) {
 
-      if (sase_regs_typ[rs2] == CONCRETE_T) {
-        sase_store_memory(pt, vaddr, CONCRETE_T, *(registers + rs2), sase_regs[rs2]);
-      } else {
-        sase_store_memory(pt, vaddr, SYMBOLIC_T, *(registers + rs2), sase_regs[rs2]);
-      }
+      sase_store_memory(pt, vaddr, sase_regs_typ[rs2], registers[rs2], sase_regs[rs2]);
 
       pc = pc + INSTRUCTIONSIZE;
       ic_sd = ic_sd + 1;
@@ -493,10 +483,7 @@ void sase_sd() {
 
 void sase_jal_jalr() {
   if (rd != REG_ZR) {
-    // if (rd != 1) // REG_RA
-      sase_regs[rd] = ctx.bv_val(*(registers + rd), 64);
-    // else
-    //   sase_regs[rd] = zero_int;
+    sase_regs[rd] = ctx.bv_val(registers[rd], 64);
 
     sase_regs_typ[rd] = CONCRETE_T;
   }
@@ -517,6 +504,7 @@ void sase_store_memory(uint64_t* pt, uint64_t vaddr, uint8_t is_symbolic, uint64
     *(is_symbolics    + mrv) = is_symbolic;
     *(values          + mrv) = value;
     *(symbolic_values + mrv) = sym_value;
+
   } else if (is_trace_space_available()) {
     tc++;
 
@@ -532,8 +520,6 @@ void sase_store_memory(uint64_t* pt, uint64_t vaddr, uint8_t is_symbolic, uint64
 }
 
 void backtrack_branch_stores() {
-  uint64_t pre_tc;
-
   while (mrif < tc) {
     if (*(vaddrs + tc) < NUMBEROFREGISTERS) {
       restore_registers_fp_sp_rd(tc, *(vaddrs + tc));
@@ -543,19 +529,3 @@ void backtrack_branch_stores() {
     tc--;
   }
 }
-
-/* -----------------------------------------------------------------
-------------------- Modified functions in Selfie.c:-----------------
-
-void implement_read(uint64_t* context);
-void implement_write(uint64_t* context);
-void implement_open(uint64_t* context);
-void implement_brk(uint64_t* context);
-void decode_execute();
-uint64_t down_load_string(uint64_t* table, uint64_t vaddr, uint64_t* s);
-void map_and_store(uint64_t* context, uint64_t vaddr, uint64_t data);
-void up_load_arguments(uint64_t* context, uint64_t argc, uint64_t* argv);
-uint64_t monster(uint64_t* to_context);
-uint64_t selfie_run(uint64_t machine);
-
-------------------------------------------------------------------- */

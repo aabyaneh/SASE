@@ -518,8 +518,6 @@ uint64_t SYSCALL_ASSERT_ZONE_BGN = 44;
 uint64_t SYSCALL_ASSERT          = 45;
 uint64_t SYSCALL_ASSERT_ZONE_END = 46;
 
-uint64_t symbolic_input_cnt = 0;
-
 // *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~
 // -----------------------------------------------------------------
 // ----------------------    R U N T I M E    ----------------------
@@ -2217,7 +2215,7 @@ void implement_read(uint64_t* context) {
             lo = fuzz_lo(value);
             up = fuzz_up(value);
 
-            printf("reused read: %llu, lo: %llu, up: %llu, read_tc_cur: %llu, read_tc: %llu tc: %llu\n", value, lo, up, read_tc_current, read_tc, sase_tc);
+            printf("reused read: %llu, lo: %llu, up: %llu, read_tc_cur: %llu, read_tc: %llu tc: %llu\n", value, lo,up, read_tc_current, read_tc, sase_tc);
 
             slv.add(ule(constrained_reads[read_tc_current], ctx.bv_val(up, 64)));
             slv.add(uge(constrained_reads[read_tc_current], ctx.bv_val(lo, 64)));
@@ -2304,6 +2302,7 @@ void implement_read(uint64_t* context) {
 
   if (sase_symbolic) {
     sase_regs[REG_A0]     = ctx.bv_val(*(get_regs(context) + REG_A0), 64);
+
     sase_regs_typ[REG_A0] = CONCRETE_T;
   }
 
@@ -2367,27 +2366,48 @@ void implement_symbolic_input(uint64_t* context) {
   uint64_t lo;
   uint64_t up;
   uint64_t step;
-  expr in(ctx);
 
   lo   = *(get_regs(context) + REG_A0);
   up   = *(get_regs(context) + REG_A1);
   step = *(get_regs(context) + REG_A2);
 
   if (sase_symbolic) {
-    printf("symbolic input: lo: %llu, up: %llu, step: %llu, cnt: %llu\n", lo, up, step, symbolic_input_cnt);
+    printf("symbolic input: lo: %llu, up: %llu, step: %llu, cnt: %llu\n", lo, up, step, input_cnt_current);
 
     if (step > 1) {
       printf("%s\n", "step is greater than 1; continue assuming step = 1");
     }
 
-    sprintf(var_buffer, "in_%llu", symbolic_input_cnt++);
-    in = ctx.bv_const(var_buffer, 64);
-    // <= up
-    slv.add(ule(in, ctx.bv_val(up, 64)));
-    // >= lo
-    slv.add(uge(in, ctx.bv_val(lo, 64)));
+    if (input_cnt_current < input_cnt) {
+      // <= up
+      slv.add(ule(constrained_inputs[input_cnt_current], ctx.bv_val(up, 64)));
+      // >= lo
+      slv.add(uge(constrained_inputs[input_cnt_current], ctx.bv_val(lo, 64)));
 
-    sase_regs[REG_A0]     = in;
+      sase_regs[REG_A0] = constrained_inputs[input_cnt_current];
+
+      input_cnt_current++;
+
+    } else {
+      if (input_cnt_current > input_cnt) {
+        printf("OUTPUT: input_cnt_current > input_cnt \n");
+        exit((int) EXITCODE_SYMBOLICEXECUTIONERROR);
+      }
+
+      sprintf(var_buffer, "in_%llu", input_cnt);
+      constrained_inputs[input_cnt] = ctx.bv_const(var_buffer, 64);
+      // <= up
+      slv.add(ule(constrained_inputs[input_cnt], ctx.bv_val(up, 64)));
+      // >= lo
+      slv.add(uge(constrained_inputs[input_cnt], ctx.bv_val(lo, 64)));
+
+      sase_regs[REG_A0] = constrained_inputs[input_cnt];
+
+      input_cnt++;
+      input_cnt_current++;
+
+    }
+
     sase_regs_typ[REG_A0] = SYMBOLIC_T;
 
     set_pc(context, get_pc(context) + INSTRUCTIONSIZE);
@@ -2490,6 +2510,7 @@ void implement_write(uint64_t* context) {
 
   if (sase_symbolic) {
     sase_regs[REG_A0]     = ctx.bv_val(*(get_regs(context) + REG_A0), 64);
+
     sase_regs_typ[REG_A0] = CONCRETE_T;
   }
 
@@ -2592,8 +2613,8 @@ void implement_open(uint64_t* context) {
   }
 
   if (sase_symbolic) {
-    // assert: *(get_regs(context) + REG_A0) < 2^32
     sase_regs[REG_A0]     = ctx.bv_val(*(get_regs(context) + REG_A0), 64);
+
     sase_regs_typ[REG_A0] = CONCRETE_T;
   }
 
@@ -2641,7 +2662,10 @@ void implement_brk(uint64_t* context) {
     set_program_break(context, program_break);
 
     if (sase_symbolic) {
+      // assert: program_break < 2^32
+      // true for the original malloc code = program_break
       sase_regs[REG_A0]     = ctx.bv_val(program_break, 64); // no need
+
       sase_regs_typ[REG_A0] = CONCRETE_T;
 
       // size = program_break - previous_program_break;
