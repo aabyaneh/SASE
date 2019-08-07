@@ -9,7 +9,7 @@
 */
 
 #include <iostream>
-#include "stdio.h"
+#include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include "api/cvc4cpp.h"
@@ -21,7 +21,7 @@
 using namespace CVC4::api;
 
 // -----------------------------------------------------------------
-// variables and procedures which will be defined in selfie.c
+// variables and procedures which are defined in selfie.c
 // and are needed in sase engine
 // -----------------------------------------------------------------
 
@@ -48,7 +48,6 @@ extern uint64_t OP_OP;
 extern uint64_t F3_ADDI;
 
 extern uint64_t entry_point;
-
 extern uint64_t ic_addi;
 extern uint64_t ic_sub;
 extern uint64_t ic_sltu;
@@ -95,12 +94,12 @@ extern uint32_t  bv_size;
 extern uint64_t  sase_symbolic;
 extern uint64_t  b;
 extern uint64_t  SASE;
-extern uint64_t  CONCRETE_T;
-extern uint64_t  SYMBOLIC_T;
+extern uint8_t   CONCRETE_T;
+extern uint8_t   SYMBOLIC_T;
 
 // symbolic registers
 extern Term*     sase_regs;
-extern uint64_t* sase_regs_typ;
+extern uint8_t*  sase_regs_typ;
 
 // engine trace
 extern uint64_t  sase_trace_size;
@@ -130,6 +129,10 @@ extern uint64_t  read_tc;
 extern uint64_t  read_tc_current;
 extern uint64_t  read_buffer;
 
+// input trace
+extern uint64_t  input_cnt;
+extern uint64_t  input_cnt_current;
+
 // ********************** engine functions ************************
 
 void store_registers_fp_sp_rd();
@@ -154,4 +157,3 @@ void sase_sd();
 void sase_jal_jalr();
 void sase_store_memory(uint64_t* pt, uint64_t vaddr, uint8_t is_symbolic, uint64_t value, Term& sym_value);
 void backtrack_branch_stores();
-void sase_backtrack_sltu(int is_true_branch_unreachable);

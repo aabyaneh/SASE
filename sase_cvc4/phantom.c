@@ -518,8 +518,6 @@ uint64_t SYSCALL_ASSERT_ZONE_BGN = 44;
 uint64_t SYSCALL_ASSERT          = 45;
 uint64_t SYSCALL_ASSERT_ZONE_END = 46;
 
-uint64_t symbolic_input_cnt = 0;
-
 // *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~
 // -----------------------------------------------------------------
 // ----------------------    R U N T I M E    ----------------------
@@ -2217,7 +2215,7 @@ void implement_read(uint64_t* context) {
             lo = fuzz_lo(value);
             up = fuzz_up(value);
 
-            printf("reused read: %llu, lo: %llu, up: %llu, read_tc_cur: %llu, read_tc: %llu tc: %llu\n", value, lo, up, read_tc_current, read_tc, sase_tc);
+            printf("reused read: %llu, lo: %llu, up: %llu, read_tc_cur: %llu, read_tc: %llu tc: %llu\n", value, lo,up, read_tc_current, read_tc, sase_tc);
 
             slv.assertFormula(slv.mkTerm(BITVECTOR_ULE, constrained_reads[read_tc_current], slv.mkBitVector(bv_size, up)));
             slv.assertFormula(slv.mkTerm(BITVECTOR_UGE, constrained_reads[read_tc_current], slv.mkBitVector(bv_size, lo)));
@@ -2367,27 +2365,48 @@ void implement_symbolic_input(uint64_t* context) {
   uint64_t lo;
   uint64_t up;
   uint64_t step;
-  Term in;
+  Term     in;
 
   lo   = *(get_regs(context) + REG_A0);
   up   = *(get_regs(context) + REG_A1);
   step = *(get_regs(context) + REG_A2);
 
   if (sase_symbolic) {
-    printf("symbolic input: lo: %llu, up: %llu, step: %llu, cnt: %llu\n", lo, up, step, symbolic_input_cnt);
+    printf("symbolic input: lo: %llu, up: %llu, step: %llu, cnt: %llu\n", lo, up, step, input_cnt_current);
 
     if (step > 1) {
       printf("%s\n", "step is greater than 1; continue assuming step = 1");
     }
 
-    sprintf(var_buffer, "in_%llu", symbolic_input_cnt++);
-    in = slv.mkVar(var_buffer, bitvector64);
-    // <= up
-    slv.assertFormula(slv.mkTerm(BITVECTOR_ULE, in, slv.mkBitVector(bv_size, up)));
-    // >= lo
-    slv.assertFormula(slv.mkTerm(BITVECTOR_UGE, in, slv.mkBitVector(bv_size, lo)));
+    if (input_cnt_current < input_cnt) {
+      sprintf(var_buffer, "in_%llu", input_cnt_current);
+      in = slv.mkVar(var_buffer, bitvector64);
+      slv.assertFormula(slv.mkTerm(BITVECTOR_ULE, in, slv.mkBitVector(bv_size, up)));
+      // >= lo
+      slv.assertFormula(slv.mkTerm(BITVECTOR_UGE, in, slv.mkBitVector(bv_size, lo)));
 
-    sase_regs[REG_A0]     = in;
+      sase_regs[REG_A0] = in;
+      input_cnt_current++;
+
+    } else {
+      if (input_cnt_current > input_cnt) {
+        printf("OUTPUT: input_cnt_current > input_cnt \n");
+        exit((int) EXITCODE_SYMBOLICEXECUTIONERROR);
+      }
+
+      sprintf(var_buffer, "in_%llu", input_cnt);
+      in = slv.mkVar(var_buffer, bitvector64);
+      // <= up
+      slv.assertFormula(slv.mkTerm(BITVECTOR_ULE, in, slv.mkBitVector(bv_size, up)));
+      // >= lo
+      slv.assertFormula(slv.mkTerm(BITVECTOR_UGE, in, slv.mkBitVector(bv_size, lo)));
+
+      sase_regs[REG_A0] = in;
+      input_cnt++;
+      input_cnt_current++;
+
+    }
+
     sase_regs_typ[REG_A0] = SYMBOLIC_T;
 
     set_pc(context, get_pc(context) + INSTRUCTIONSIZE);
@@ -2592,8 +2611,8 @@ void implement_open(uint64_t* context) {
   }
 
   if (sase_symbolic) {
-    // assert: *(get_regs(context) + REG_A0) < 2^32
     sase_regs[REG_A0]     = slv.mkBitVector(bv_size, *(get_regs(context) + REG_A0));
+
     sase_regs_typ[REG_A0] = CONCRETE_T;
   }
 
@@ -2641,6 +2660,8 @@ void implement_brk(uint64_t* context) {
     set_program_break(context, program_break);
 
     if (sase_symbolic) {
+      // assert: program_break < 2^32
+      // true for the original malloc code = program_break
       sase_regs[REG_A0]     = slv.mkBitVector(bv_size, program_break); // no need
       sase_regs_typ[REG_A0] = CONCRETE_T;
 
@@ -4191,7 +4212,7 @@ uint64_t selfie_run(uint64_t machine) {
   printf("\n");
   printf3((uint64_t*) "%s: phantom terminating %s with exit code %d\n", exe_name, get_name(current_context), (uint64_t*) sign_extend(exit_code, SYSCALL_BITWIDTH));
 
-  print_profile();
+  // print_profile();
 
   sase_symbolic = 0;
   record        = 0;
